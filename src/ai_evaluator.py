@@ -27,18 +27,9 @@ class EvaluatedIdea:
     market_size: str  # "large", "medium", "small"
     competition: str  # "high", "medium", "low"
     build_difficulty: str  # "easy", "medium", "hard"
+    mvp_weeks: int
     mvp_budget: float
     summary: str  # 1-2 sentences
-
-    # SYSTEM_PROMPT = (
-    #     "You are a startup analyst.  "
-    #     "Return a JSON list with keys: score, market_size, competition, build_difficulty, summary.  "
-    #     "score is 0-100.  "
-    #     "market_size ∈ {large,medium,small}.  "
-    #     "competition ∈ {high,medium,low}.  "
-    #     "build_difficulty ∈ {easy,medium,hard}.  "
-    #     "summary is 1-2 sentences."
-    # )
 
 
 class AIEvaluator:
@@ -48,14 +39,15 @@ class AIEvaluator:
     """
 
     SYSTEM_PROMPT = (
-        "You are a startup analyst.  "
-        "Return a JSON list with keys: score, market_size, competition, build_difficulty, mvp_budget, summary.  "
-        "score is 0-100.  "
+        "You are an experienced micro-SaaS scout."
+        "Return a JSON list with keys: score, market_size, competition, build_difficulty, mvp_weeks, mvp_budget, summary.  "
+        "score is 0-100. It must absolutly include all the other parameters into the score."
         "market_size ∈ {large,medium,small}.  "
         "competition ∈ {high,medium,low}.  "
         "build_difficulty ∈ {easy,medium,hard}.  "
         "mvp_budget is a float in EUR based on the fiverr prices.  "
         "summary is 2-3 sentences."
+        "the output must be ranked in descending order by the score"
     )
 
     def __init__(self, keyword: str):
@@ -81,7 +73,9 @@ class AIEvaluator:
             raise ValueError("Invalid JSON from DeepSeek")
         return json.loads(match.group(1))
 
-    def _merge_list_dictionaries(self, original: List[Dict[str, Any]], new: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def _merge_list_dictionaries(
+        self, original: List[Dict[str, Any]], new: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
         """
         Merge two lists of dictionaries, updating the original with new values.
         If a key exists in both, the value from the new dictionary is used.
@@ -113,7 +107,7 @@ class AIEvaluator:
                 {"role": "system", "content": self.SYSTEM_PROMPT},
                 {"role": "user", "content": prompt},
             ],
-            "temperature": 0.2,
+            "temperature": 0.25,
             "max_tokens": min(300 * len(ideas), 4096),  # limit to 4096 tokens
             "top_p": 0.95,
         }

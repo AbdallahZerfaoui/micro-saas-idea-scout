@@ -228,7 +228,7 @@ class MicroSaasClient:
                 ideas.add(tuple(idea.items()))
             idea_id = self._call_id_generator(keyword)
             print(f"[INFO] Found {len(ideas)} ideas so far for '{keyword}'")
-            time.sleep(1.5)
+            # time.sleep(1.5)
             max_nbr_requests -= 1
 
         final_result = [dict(idea) for idea in ideas]
