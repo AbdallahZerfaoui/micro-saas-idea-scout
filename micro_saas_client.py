@@ -7,10 +7,8 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 from dotenv import load_dotenv
 import logging
-import ast
+import ast  # str to dict conversion
 from config import Config
-
-# load_dotenv()
 
 
 class ProxyManager:
@@ -57,19 +55,19 @@ class CacheManager:
         self.cache_dir = cache_dir
         self.cache_dir.mkdir(exist_ok=True)
 
-    def _cache_file(self, keyword: str) -> Path:
+    def cache_file(self, keyword: str) -> Path:
         safe = "".join(c if c.isalnum() else "_" for c in keyword.lower())
         return self.cache_dir / f"{safe}.json"
 
     def load_cached(self, keyword: str) -> Optional[str]:
         """Load cached idea-id for a keyword."""
-        cache = self._cache_file(keyword)
+        cache = self.cache_file(keyword)
         if cache.exists():
             print(f"[Info] Loading cached idea-id for '{keyword}'")
             return json.loads(cache.read_text()).get("id")
         return None
 
-    def _create_cache_file_names(self, keyword: str) -> tuple[str, str]:
+    def _createcache_file_names(self, keyword: str) -> tuple[str, str]:
         """
         Create standardized cache file names for keyword and ideas.
         Returns a tuple of (keyword_id_file_name, ideas_file_name).
@@ -83,17 +81,20 @@ class CacheManager:
         ideas_file_name = f"ideas_{std_keyword}"
         return kw_id_file_name, ideas_file_name
 
-    def _save_cache(self, keyword: str, data: dict) -> None:
+    def save_cache(self, keyword: str, data: dict) -> None:
         # std_keyword = keyword.lower().replace(" ", "_")
-        kw_id_file_name, ideas_file_name = self._create_cache_file_names(keyword)
+        kw_id_file_name, ideas_file_name = self._createcache_file_names(keyword)
         if not isinstance(data, dict):
             raise ValueError("Data must be a dictionary.")
         if "id" not in data:
             raise ValueError("Data must contain an 'id' field.")
         elif len(data.keys()) == 1:
-            self._cache_file(kw_id_file_name).write_text(json.dumps(data, indent=2))
+            self.cache_file(kw_id_file_name).write_text(json.dumps(data, indent=2))
         else:
-            self._cache_file(ideas_file_name).write_text(json.dumps(data, indent=2))
+            self.cache_file(ideas_file_name).write_text(json.dumps(data, indent=2))
+
+    def list_cached_keywords(self) -> List[str]:
+        return [p.stem.replace("_", " ") for p in self.cache_dir.glob("*.json")]
 
 
 class MicroSaasClient:
@@ -111,7 +112,7 @@ class MicroSaasClient:
     CACHE_DIR = Path(".cache")
     CACHE_DIR.mkdir(exist_ok=True)
 
-    REQUEST_DELAY = float(os.getenv("REQUEST_DELAY", 0.5))
+    REQUEST_DELAY = Config.REQUEST_DELAY
     HEADERS = {
         "User-Agent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:140.0) Gecko/20100101 Firefox/140.0",
         "Accept": "application/json",
@@ -195,17 +196,11 @@ class MicroSaasClient:
             idea_id = self._call_id_generator(keyword)
             if not idea_id:
                 return None
-            self.cache_manager._save_cache(keyword, {"id": idea_id})
+            self.cache_manager.save_cache(keyword, {"id": idea_id})
         print(f"[INFO] Fetching ideas for keyword: '{keyword}' from the cache")
         ideas_dict = self._fetch_ideas(idea_id)
-        self.cache_manager._save_cache(keyword, ideas_dict)
+        self.cache_manager.save_cache(keyword, ideas_dict)
         return ideas_dict
-
-    def list_cached_keywords(self) -> List[str]:
-        return [
-            p.stem.replace("_", " ")
-            for p in self.cache_manager.CACHE_DIR.glob("*.json")
-        ]
 
     def deep_extract_ideas(self, keyword: str, limit: int = 12) -> List[Dict[str, Any]]:
         """

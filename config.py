@@ -22,6 +22,7 @@ class Config:
 
     # ---------- Timing ----------
     REQUEST_DELAY = 0.5  # seconds
+    DEEPSEEK_TIMEOUT = 120
     TIMEOUT = 30
     SHORT_TIMEOUT = 3
 

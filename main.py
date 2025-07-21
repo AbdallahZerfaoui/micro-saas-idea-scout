@@ -1,6 +1,7 @@
 import sys
 import json
 from micro_saas_client import MicroSaasClient, ProxyManager
+from ai_evaluator import AIEvaluator, EvaluatedIdea
 
 
 def main():
@@ -10,15 +11,18 @@ def main():
     """
     client = MicroSaasClient()
     proxy_manager = ProxyManager()
+
     if not proxy_manager.healthy_proxy_check():
         print("Exiting...")
         sys.exit(1)
     kw = input("Keyword? ").strip()
-    ideas = client.get_ideas(kw)
-    # ideas = client.deep_extract_ideas(kw, limit=20)
+    ai_evaluator = AIEvaluator(kw)
+    # ideas = client.get_ideas(kw)
+    ideas = client.deep_extract_ideas(kw, limit=10)
     if ideas:
         print(f"Found ideas for '{kw}':")
-        # print(json.dumps(ideas, indent=2))
+        evaluated_ideas = ai_evaluator.evaluate(ideas)
+        # print(json.dumps([idea.__dict__ for idea in evaluated_ideas], indent=2))
     else:
         print("No idea found.")
 
