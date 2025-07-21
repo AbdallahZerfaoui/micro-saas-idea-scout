@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Micro-SaaS Scout</title>
+  <style>
+    body{font-family:system-ui;background:#f6f8fa;margin:0;padding:2rem}
+    h1{margin-top:0}
+    label{display:block;margin:.5rem 0}
+    input{width:100%;padding:.5rem;font-size:1rem}
+    button{margin-top:.5rem;padding:.5rem 1rem;font-size:1rem}
+    #progress{display:none;margin:1rem 0}
+    table{width:100%;border-collapse:collapse;margin-top:1rem;background:#fff}
+    th,td{padding:.5rem;border:1px solid #ddd;text-align:left}
+  </style>
+</head>
+<body>
+  <h1>Micro-SaaS Scout</h1>
+
+  <label>DeepSeek API Key
+    <input id="apiKey" type="password" placeholder="sk-..." />
+  </label>
+
+  <label>Keyword
+    <input id="keyword" type="text" placeholder="travel" />
+  </label>
+
+  <button onclick="run()">Generate & Rank</button>
+
+  <div id="progress">⏳ <span id="elapsed">0.0</span> s elapsed…</div>
+
+  <table id="results" style="display:none">
+    <thead>
+      <tr>
+        <th>Idea</th><th>Score</th><th>MVP wks</th><th>Summary</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+<script>
+async function run() {
+  const apiKey = document.getElementById('apiKey').value.trim();
+  const keyword = document.getElementById('keyword').value.trim();
+  if (!apiKey || !keyword) return alert('Fill both fields');
+
+  // show progress bar
+  const progress = document.getElementById('progress');
+  const elapsed  = document.getElementById('elapsed');
+  progress.style.display = 'block';
+  const start = performance.now();
+  const timer = setInterval(() => elapsed.textContent = ((performance.now()-start)/1000).toFixed(1), 100);
+
+  try {
+    const res = await fetch('http://localhost:8000/evaluate', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({api_key: apiKey, keyword, limit: 20})
+    });
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+
+    const tbody = document.querySelector('#results tbody');
+    tbody.innerHTML = '';
+    data.forEach(r => {
+      const tr = tbody.insertRow();
+      tr.innerHTML = `<td>${r.idea}</td><td>${r.score}</td><td>${r.mvp_weeks}</td><td>${r.summary}</td>`;
+    });
+    document.getElementById('results').style.display = 'table';
+  } catch (e) {
+    alert('Error: ' + e.message);
+  } finally {
+    clearInterval(timer);
+    progress.style.display = 'none';
+  }
+}
+</script>
+</body>
+</html>

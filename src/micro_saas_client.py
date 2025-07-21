@@ -9,6 +9,8 @@ from dotenv import load_dotenv
 import logging
 import ast  # str to dict conversion
 from src.config import Config
+import asyncio
+from tqdm import tqdm
 
 
 class ProxyManager:
@@ -130,7 +132,7 @@ class MicroSaasClient:
         self.cache_manager = CacheManager()
 
     # --------------- API calls --------------- #
-    def _call_id_generator(self, keyword: str) -> Optional[str]:
+    async def _call_id_generator(self, keyword: str) -> Optional[str]:
         """
         Call the micro-saas idea generator API with a keyword.
         Returns the idea ID if successful, None otherwise.
@@ -157,7 +159,7 @@ class MicroSaasClient:
         finally:
             time.sleep(self.REQUEST_DELAY)
 
-    def _fetch_ideas(self, idea_id: str) -> Dict[str, Any]:
+    async def _fetch_ideas(self, idea_id: str) -> Dict[str, Any]:
         url = f"{self.SUPABASE_URL}?select=*&id=eq.{idea_id}"
         # proxies = self._next_proxy()
         resp = requests.get(url, headers=self.HEADERS, proxies=self.proxies, timeout=30)
@@ -186,23 +188,23 @@ class MicroSaasClient:
         return results
 
     # --------------- public API --------------- #
-    def get_ideas(self, keyword: str) -> Optional[Dict[str, Any]]:
+    async def get_ideas(self, keyword: str) -> Optional[Dict[str, Any]]:
         """
         Return the full idea dict for a keyword (cached or fresh).
         """
         idea_id = self.cache_manager.load_cached(keyword)
         if not idea_id:
             print(f"[INFO] fetching new idea-id for '{keyword}' …")
-            idea_id = self._call_id_generator(keyword)
+            idea_id = await self._call_id_generator(keyword)
             if not idea_id:
                 return None
             self.cache_manager.save_cache(keyword, {"id": idea_id})
         print(f"[INFO] Fetching ideas for keyword: '{keyword}' from the cache")
-        ideas_dict = self._fetch_ideas(idea_id)
+        ideas_dict = await self._fetch_ideas(idea_id)
         self.cache_manager.save_cache(keyword, ideas_dict)
         return ideas_dict
 
-    def deep_extract_ideas(self, keyword: str, limit: int = 12) -> List[Dict[str, Any]]:
+    async def deep_extract_ideas(self, keyword: str, limit: int = 12) -> List[Dict[str, Any]]:
         """
         Return a list of unique ideas for a keyword
         So the function will send several requests to the API
@@ -210,30 +212,33 @@ class MicroSaasClient:
         """
         ideas = set()
         max_nbr_requests = 10
-        idea_id = self._call_id_generator(keyword)
-        while len(ideas) < limit and max_nbr_requests > 0:
-            if not idea_id:
-                idea_id = self._call_id_generator(keyword)
-                print(
-                    f"[INFO] No idea-id found for '{keyword}', generating a new one …"
-                )
-                continue
-            ideas_dict = self._fetch_ideas(idea_id)
-            # if not ideas_dict:
-            #     continue
-            ideas_list = self._extract_ideas(ideas_dict)
-            for idea in ideas_list:
-                if len(ideas) >= limit:
-                    break
-                ideas.add(tuple(idea.items()))
-            idea_id = self._call_id_generator(keyword)
-            print(f"[INFO] Found {len(ideas)} ideas so far for '{keyword}'")
-            # time.sleep(1.5)
-            max_nbr_requests -= 1
+        idea_id = await self._call_id_generator(keyword)
+        with tqdm(desc=f"Request started", unit="s", leave=False) as bar:
+            start = time.perf_counter()
+            while len(ideas) < limit and max_nbr_requests > 0:
+                if not idea_id:
+                    idea_id = await self._call_id_generator(keyword)
+                    print(
+                        f"[INFO] No idea-id found for '{keyword}', generating a new one …"
+                    )
+                    continue
+                ideas_dict = await self._fetch_ideas(idea_id)
+                # if not ideas_dict:
+                #     continue
+                ideas_list = self._extract_ideas(ideas_dict)
+                for idea in ideas_list:
+                    if len(ideas) >= limit:
+                        break
+                    ideas.add(tuple(idea.items()))
+                idea_id = await self._call_id_generator(keyword)
+                print(f"[INFO] Found {len(ideas)} ideas so far for '{keyword}'")
+                # time.sleep(1.5)
+                bar.set_postfix(elapsed=f"{time.perf_counter()-start:.1f}s")
+                max_nbr_requests -= 1
 
-        final_result = [dict(idea) for idea in ideas]
-        results_file_name = f"ideas_{keyword.lower().replace(' ', '_')}_{limit}.json"
-        self.cache_manager.cache_file(results_file_name).write_text(
-            json.dumps(final_result, indent=2)
-        )
-        return final_result
+            final_result = [dict(idea) for idea in ideas]
+            results_file_name = f"ideas_{keyword.lower().replace(' ', '_')}_{limit}.json"
+            self.cache_manager.cache_file(results_file_name).write_text(
+                json.dumps(final_result, indent=2)
+            )
+            return final_result

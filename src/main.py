@@ -2,9 +2,9 @@ import sys
 import json
 from src.micro_saas_client import MicroSaasClient, ProxyManager
 from src.ai_evaluator import AIEvaluator, EvaluatedIdea
+import asyncio
 
-
-def main():
+async def main():
     """
     Main function to run the micro-saas client demo.
     It initializes the client, checks proxy health, and fetches ideas based on user input.
@@ -19,7 +19,7 @@ def main():
     ai_evaluator = AIEvaluator(kw)
     # ideas = client.get_ideas(kw)
     user_limit = input("How many ideas do you want to fetch? ").strip()
-    ideas = client.deep_extract_ideas(kw, limit=int(user_limit))
+    ideas = await client.deep_extract_ideas(kw, limit=int(user_limit))
     if ideas:
         print(f"Found ideas for '{kw}':")
         evaluated_ideas = ai_evaluator.evaluate(ideas)
@@ -29,4 +29,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
