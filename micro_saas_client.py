@@ -146,12 +146,12 @@ class MicroSaasClient:
 
 
 # ---------------- demo ---------------- #
-if __name__ == "__main__":
-    client = MicroSaasClient()
-    client.healthy_proxy_check()
-    kw = input("Keyword? ").strip()
-    ideas = client.get_ideas(kw)
-    if ideas:
-        print(json.dumps(ideas, indent=2))
-    else:
-        print("No idea found.")
+# if __name__ == "__main__":
+#     client = MicroSaasClient()
+#     client.healthy_proxy_check()
+#     kw = input("Keyword? ").strip()
+#     ideas = client.get_ideas(kw)
+#     if ideas:
+#         print(json.dumps(ideas, indent=2))
+#     else:
+#         print("No idea found.")
