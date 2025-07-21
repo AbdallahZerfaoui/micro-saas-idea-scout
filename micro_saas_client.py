@@ -8,8 +8,92 @@ from typing import List, Dict, Any, Optional
 from dotenv import load_dotenv
 import logging
 import ast
+from config import Config
 
-load_dotenv()
+# load_dotenv()
+
+
+class ProxyManager:
+    """
+    Manages proxy rotation and health checks.
+    """
+
+    def __init__(self):
+        self.proxies = {
+            "http": os.getenv("PROXY_URL"),
+            "https": os.getenv("PROXY_URL"),
+        }
+        self._current_proxy_index = 0
+
+    def ping_proxy(self) -> bool:
+        """Return True if proxy answers within 5 seconds."""
+        try:
+            resp = requests.head(
+                Config.PROXY_PING_URL,
+                proxies=self.proxies,
+                timeout=Config.SHORT_TIMEOUT,
+            )
+            return resp.status_code == 200
+        except requests.RequestException:
+            return False
+
+    def healthy_proxy_check(self) -> bool:
+        """
+        Return only proxies that pass the ping test.
+        """
+        print("[INFO] checking proxies …")
+        healthy = self.ping_proxy()
+        print(f"healthy: {healthy}")
+        print(f"[INFO] The proxy is {'healthy' if healthy else 'unhealthy'}.")
+        return healthy
+
+
+class CacheManager:
+    """
+    Manages caching of keyword and ideas.
+    """
+
+    def __init__(self, cache_dir: Path = Path(".cache")):
+        self.cache_dir = cache_dir
+        self.cache_dir.mkdir(exist_ok=True)
+
+    def _cache_file(self, keyword: str) -> Path:
+        safe = "".join(c if c.isalnum() else "_" for c in keyword.lower())
+        return self.cache_dir / f"{safe}.json"
+
+    def load_cached(self, keyword: str) -> Optional[str]:
+        """Load cached idea-id for a keyword."""
+        cache = self._cache_file(keyword)
+        if cache.exists():
+            print(f"[Info] Loading cached idea-id for '{keyword}'")
+            return json.loads(cache.read_text()).get("id")
+        return None
+
+    def _create_cache_file_names(self, keyword: str) -> tuple[str, str]:
+        """
+        Create standardized cache file names for keyword and ideas.
+        Returns a tuple of (keyword_id_file_name, ideas_file_name).
+        """
+        if not keyword:
+            raise ValueError("Keyword must not be empty.")
+        if not isinstance(keyword, str):
+            raise TypeError("Keyword must be a string.")
+        std_keyword = keyword.lower().replace(" ", "_")
+        kw_id_file_name = f"keyword_id_{std_keyword}"
+        ideas_file_name = f"ideas_{std_keyword}"
+        return kw_id_file_name, ideas_file_name
+
+    def _save_cache(self, keyword: str, data: dict) -> None:
+        # std_keyword = keyword.lower().replace(" ", "_")
+        kw_id_file_name, ideas_file_name = self._create_cache_file_names(keyword)
+        if not isinstance(data, dict):
+            raise ValueError("Data must be a dictionary.")
+        if "id" not in data:
+            raise ValueError("Data must contain an 'id' field.")
+        elif len(data.keys()) == 1:
+            self._cache_file(kw_id_file_name).write_text(json.dumps(data, indent=2))
+        else:
+            self._cache_file(ideas_file_name).write_text(json.dumps(data, indent=2))
 
 
 class MicroSaasClient:
@@ -42,71 +126,7 @@ class MicroSaasClient:
             "https": os.getenv("PROXY_URL"),
         }
         self._current_proxy_index = 0
-
-    # ---------- proxy health-check ----------
-    PING_URL = "https://ipv4.webshare.io/"
-
-    def ping_proxy(self) -> bool:
-        """Return True if proxy answers within 5 s."""
-        try:
-            resp = requests.head(
-                self.PING_URL,
-                proxies=self.proxies,
-                timeout=3,
-            )
-            return resp.status_code == 200
-        except requests.RequestException:
-            return False
-
-    def healthy_proxy_check(self) -> bool:
-        """Return only proxies that pass the ping test."""
-        print("[INFO] checking proxies …")
-        healthy = self.ping_proxy()
-        print(f"healthy: {healthy}")
-        print(f"[INFO] The proxy is {'healthy' if healthy else 'unhealthy'}.")
-        return healthy
-
-    # --------------- caching --------------- #
-    def _create_cache_file_names(self, keyword: str) -> tuple[str, str]:
-        """
-        Create standardized cache file names for keyword and ideas.
-        Returns a tuple of (keyword_id_file_name, ideas_file_name).
-        """
-        if not keyword:
-            raise ValueError("Keyword must not be empty.")
-        if not isinstance(keyword, str):
-            raise TypeError("Keyword must be a string.")
-        std_keyword = keyword.lower().replace(" ", "_")
-        kw_id_file_name = f"keyword_id_{std_keyword}"
-        ideas_file_name = f"ideas_{std_keyword}"
-        return kw_id_file_name, ideas_file_name
-
-    def _cache_file(self, keyword: str) -> Path:
-        safe = "".join(c if c.isalnum() else "_" for c in keyword.lower())
-        return self.CACHE_DIR / f"{safe}.json"
-
-    def _load_cached(self, keyword: str) -> Optional[str]:
-        """
-        Load cached idea-id for a keyword.
-        Returns the idea ID if it exists, None otherwise."""
-        kw_id_file_name, _ = self._create_cache_file_names(keyword)
-        cache = self._cache_file(kw_id_file_name)
-        if cache.exists():
-            logging.info(f"Loading cached idea-id for '{keyword}'")
-            return json.loads(cache.read_text()).get("id")
-        return None
-
-    def _save_cache(self, keyword: str, data: dict) -> None:
-        # std_keyword = keyword.lower().replace(" ", "_")
-        kw_id_file_name, ideas_file_name = self._create_cache_file_names(keyword)
-        if not isinstance(data, dict):
-            raise ValueError("Data must be a dictionary.")
-        if "id" not in data:
-            raise ValueError("Data must contain an 'id' field.")
-        elif len(data.keys()) == 1:
-            self._cache_file(kw_id_file_name).write_text(json.dumps(data, indent=2))
-        else:
-            self._cache_file(ideas_file_name).write_text(json.dumps(data, indent=2))
+        self.cache_manager = CacheManager()
 
     # --------------- API calls --------------- #
     def _call_id_generator(self, keyword: str) -> Optional[str]:
@@ -153,7 +173,11 @@ class MicroSaasClient:
             raise ValueError("Data must be a dictionary.")
         if "ideas" not in data:
             raise KeyError("Data must contain an 'ideas' field.")
-        ideas_dict = ast.literal_eval(str(data["ideas"])) if isinstance(data["ideas"], str) else {}
+        ideas_dict = (
+            ast.literal_eval(str(data["ideas"]))
+            if isinstance(data["ideas"], str)
+            else {}
+        )
         list_values = [value for _, value in ideas_dict.items()]
         results = []
         for idx in range(1, len(list_values), 2):
@@ -165,21 +189,24 @@ class MicroSaasClient:
         """
         Return the full idea dict for a keyword (cached or fresh).
         """
-        idea_id = self._load_cached(keyword)
+        idea_id = self.cache_manager.load_cached(keyword)
         if not idea_id:
             print(f"[INFO] fetching new idea-id for '{keyword}' …")
             idea_id = self._call_id_generator(keyword)
             if not idea_id:
                 return None
-            self._save_cache(keyword, {"id": idea_id})
+            self.cache_manager._save_cache(keyword, {"id": idea_id})
         print(f"[INFO] Fetching ideas for keyword: '{keyword}' from the cache")
         ideas_dict = self._fetch_ideas(idea_id)
-        self._save_cache(keyword, ideas_dict)
+        self.cache_manager._save_cache(keyword, ideas_dict)
         return ideas_dict
 
     def list_cached_keywords(self) -> List[str]:
-        return [p.stem.replace("_", " ") for p in self.CACHE_DIR.glob("*.json")]
-    
+        return [
+            p.stem.replace("_", " ")
+            for p in self.cache_manager.CACHE_DIR.glob("*.json")
+        ]
+
     def deep_extract_ideas(self, keyword: str, limit: int = 12) -> List[Dict[str, Any]]:
         """
         Return a list of unique ideas for a keyword
@@ -192,7 +219,9 @@ class MicroSaasClient:
         while len(ideas) < limit and max_nbr_requests > 0:
             if not idea_id:
                 idea_id = self._call_id_generator(keyword)
-                print(f"[INFO] No idea-id found for '{keyword}', generating a new one …")
+                print(
+                    f"[INFO] No idea-id found for '{keyword}', generating a new one …"
+                )
                 continue
             ideas_dict = self._fetch_ideas(idea_id)
             # if not ideas_dict:
@@ -209,6 +238,7 @@ class MicroSaasClient:
 
         final_result = [dict(idea) for idea in ideas]
         results_file_name = f"ideas_{keyword.lower().replace(' ', '_')}_{limit}.json"
-        self._cache_file(results_file_name).write_text(json.dumps(final_result, indent=2))
+        self.cache_manager.cache_file(results_file_name).write_text(
+            json.dumps(final_result, indent=2)
+        )
         return final_result
-
