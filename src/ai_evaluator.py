@@ -10,7 +10,7 @@ from typing import List, Dict, Any
 from dataclasses import dataclass
 from pathlib import Path
 import requests
-from config import Config
+from src.config import Config
 import logging
 import re  # for regex matching in _extract_json
 
@@ -114,7 +114,8 @@ class AIEvaluator:
                 {"role": "user", "content": prompt},
             ],
             "temperature": 0.2,
-            "max_tokens": 300 * len(ideas),
+            "max_tokens": min(300 * len(ideas), 4096),  # limit to 4096 tokens
+            "top_p": 0.95,
         }
         print(f"Evaluating {len(ideas)} ideas...")
         resp = requests.post(

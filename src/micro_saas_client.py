@@ -8,7 +8,7 @@ from typing import List, Dict, Any, Optional
 from dotenv import load_dotenv
 import logging
 import ast  # str to dict conversion
-from config import Config
+from src.config import Config
 
 
 class ProxyManager:

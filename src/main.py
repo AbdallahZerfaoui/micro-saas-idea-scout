@@ -1,7 +1,7 @@
 import sys
 import json
-from micro_saas_client import MicroSaasClient, ProxyManager
-from ai_evaluator import AIEvaluator, EvaluatedIdea
+from src.micro_saas_client import MicroSaasClient, ProxyManager
+from src.ai_evaluator import AIEvaluator, EvaluatedIdea
 
 
 def main():
@@ -18,7 +18,8 @@ def main():
     kw = input("Keyword? ").strip()
     ai_evaluator = AIEvaluator(kw)
     # ideas = client.get_ideas(kw)
-    ideas = client.deep_extract_ideas(kw, limit=10)
+    user_limit = input("How many ideas do you want to fetch? ").strip()
+    ideas = client.deep_extract_ideas(kw, limit=int(user_limit))
     if ideas:
         print(f"Found ideas for '{kw}':")
         evaluated_ideas = ai_evaluator.evaluate(ideas)
