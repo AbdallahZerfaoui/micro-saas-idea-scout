@@ -1,0 +1,1 @@
+# micro-saas-idea-scout
